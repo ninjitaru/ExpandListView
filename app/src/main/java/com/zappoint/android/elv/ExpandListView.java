@@ -2,6 +2,7 @@ package com.zappoint.android.elv;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.database.DataSetObserver;
 import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
@@ -40,8 +41,10 @@ public class ExpandListView extends AdapterView<Adapter> {
     private float mTouchDownY;
     private int mContentHeight;
     private int mMaxOffset;
-    private com.zappoint.android.elv.ListMovementListener mListMovementListener;
-    private int mTravelDistance;
+    private ListMovementListener mListMovementListener;
+    private float mTravelDistance;
+    private DataSetObserver mSetObserver;
+    private float mTouchDownX;
 
     public ExpandListView(Context context) {
         super(context);
@@ -302,12 +305,13 @@ public class ExpandListView extends AdapterView<Adapter> {
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
         boolean result = super.onTouchEvent(ev);
-        int distance = mTravelDistance;
+        float distance = mTravelDistance;
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mScroller.forceFinished(true);
                 mScrollHandler.sendEmptyMessage(0);
                 mTouchDownY = ev.getRawY();
+                mTouchDownX = ev.getRawX();
                 if (mVelocityTracker == null) {
                     mVelocityTracker = VelocityTracker.obtain();
                 }
@@ -367,9 +371,10 @@ public class ExpandListView extends AdapterView<Adapter> {
                         mListMovementListener.onScrollDown();
                     }
                 }
-                mTravelDistance += Math.abs(diff);
+                mTravelDistance = mTravelDistance + Math.abs(diff) + Math.abs(ev.getRawX() - mTouchDownX);
                 setScrollY(scrollY);
                 mTouchDownY = y;
+                mTouchDownX = ev.getRawX();
                 requestLayout();
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -382,7 +387,7 @@ public class ExpandListView extends AdapterView<Adapter> {
         return result;
     }
 
-    private boolean determineClick(MotionEvent ev, int distance) {
+    private boolean determineClick(MotionEvent ev, float distance) {
         if (mVelocityTracker != null) {
             mVelocityTracker.computeCurrentVelocity(1500);
             float velocityy = mVelocityTracker.getYVelocity();
@@ -401,7 +406,7 @@ public class ExpandListView extends AdapterView<Adapter> {
         return false;
     }
 
-    public void setListMovementLister(com.zappoint.android.elv.ListMovementListener listener) {
+    public void setListMovementLister(ListMovementListener listener) {
         mListMovementListener = listener;
     }
 
@@ -410,9 +415,43 @@ public class ExpandListView extends AdapterView<Adapter> {
     }
 
     public void setAdapter(Adapter adapter) {
+        if (mAdapter != null) {
+            mAdapter.unregisterDataSetObserver(getDataSetObserver());
+        }
         mAdapter = adapter;
+        if (mAdapter != null) {
+            mAdapter.registerDataSetObserver(getDataSetObserver());
+        }
         calculateDimensions(getHeight());
         requestLayout();
+    }
+
+    private void updateData() {
+        for (Integer key : mChildView.keySet()) {
+            View view = mChildView.get(key);
+            if (mAdapter != null) {
+                mAdapter.getView(key, view, this);
+            }
+        }
+    }
+
+    private DataSetObserver getDataSetObserver() {
+        if (mSetObserver == null) {
+            mSetObserver = new DataSetObserver() {
+                @Override
+                public void onChanged() {
+                    super.onChanged();
+                    updateData();
+                }
+
+                @Override
+                public void onInvalidated() {
+                    super.onInvalidated();
+                    invalidate();
+                }
+            };
+        }
+        return mSetObserver;
     }
 
     private void calculateDimensions(int h) {
