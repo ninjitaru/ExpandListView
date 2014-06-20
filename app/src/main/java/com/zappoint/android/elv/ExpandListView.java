@@ -427,11 +427,32 @@ public class ExpandListView extends AdapterView<Adapter> {
     }
 
     private void updateData() {
+        mDeleteList.clear();
         for (Integer key : mChildView.keySet()) {
             View view = mChildView.get(key);
             if (mAdapter != null) {
-                mAdapter.getView(key, view, this);
+                view = mAdapter.getView(key, view, this);
+                if (view == null) {
+                    mDeleteList.add(key);
+                }
             }
+        }
+
+        for (Integer key : mDeleteList) {
+            removeInnerViewAt(key);
+        }
+        mDeleteList.clear();
+        if (mListMovementListener != null) {
+            mListMovementListener.onItemIndexChanged(clamp(getScrollY(), 0, mMaxOffset) / mMinHeight);
+        }
+    }
+
+    private void removeInnerViewAt(int key) {
+        View child = mChildView.get(key);
+        if (child != null) {
+            removeViewInLayout(child);
+            mChildView.remove(child);
+            mRecycleBin.add(child);
         }
     }
 
